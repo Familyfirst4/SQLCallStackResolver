@@ -2,6 +2,7 @@
 // Licensed under the MIT License - see LICENSE file in this repo.
 namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
     using System.Collections.Generic;
+    using System.Threading;
 
     internal class ThreadParams {
         internal int threadOrdinal, numThreads;
@@ -9,5 +10,6 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
         internal string symPath;
         internal List<string> dllPaths;
         internal bool searchPDBsRecursively, searchDLLRecursively, framesOnSingleLine, includeSourceInfo, showInlineFrames, relookupSource, includeOffsets, cachePDB;
+        internal CancellationTokenSource cts;
     }
 }

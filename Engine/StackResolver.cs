@@ -30,29 +30,16 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
         public string StatusMessage;
         /// Internal counter used to implement progress reporting
         internal int globalCounter = 0;
-        internal bool cancelRequested = false;
-        private CancellationTokenSource cts;
         /// Percent completed - populated during associated long-running operations
         public int PercentComplete;
 
-        private void PrepCTS() {
-            this.cts = new CancellationTokenSource();
-        }
-
-        public void CancelRunningTasks() {
-            this.cancelRequested = true;
-            this.cts.Cancel();
-        }
-
-        public Task<Tuple<List<string>, List<string>>> GetDistinctXELFieldsAsync(string[] xelFiles, int eventsToSample) {
-            this.PrepCTS(); // get a new CTS to use for later cancellation.
-            return XELHelper.GetDistinctXELActionsFieldsAsync(xelFiles, eventsToSample, this.cts);
+        public Task<Tuple<List<string>, List<string>>> GetDistinctXELFieldsAsync(string[] xelFiles, int eventsToSample, CancellationTokenSource cts) {
+            return XELHelper.GetDistinctXELActionsFieldsAsync(xelFiles, eventsToSample, cts);
         }
 
         /// Public method which to help import XEL files
-        public async Task<Tuple<int, string>> ExtractFromXEL(string[] xelFiles, bool groupEvents, List<string> relevantFields) {
-            this.PrepCTS(); // get a new CTS to use for later cancellation.
-            return await XELHelper.ExtractFromXELAsync(this, xelFiles, groupEvents, relevantFields, this.cts);
+        public async Task<Tuple<int, string>> ExtractFromXEL(string[] xelFiles, bool groupEvents, List<string> relevantFields, CancellationTokenSource cts) {
+            return await XELHelper.ExtractFromXELAsync(this, xelFiles, groupEvents, relevantFields, cts);
         }
 
         /// Convert virtual-address only type frames to their module+offset format
@@ -330,8 +317,7 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
         /// <returns></returns>
         public string ResolveCallstacks(string inputCallstackText, string symPath, bool searchPDBsRecursively, List<string> dllPaths,
             bool searchDLLRecursively, bool framesOnSingleLine, bool includeSourceInfo, bool relookupSource, bool includeOffsets,
-            bool showInlineFrames, bool cachePDB, string outputFilePath) {
-            this.cancelRequested = false;
+            bool showInlineFrames, bool cachePDB, string outputFilePath, CancellationTokenSource cts) {
             this.cachedSymbols.Clear();
 
             // delete and recreate the cached PDB folder
@@ -385,7 +371,7 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
                         this.StatusMessage = "Pre-processing XEvent events...";
                         // process individual callstacks
                         foreach (XmlNode currstack in allstacknodes) {
-                            if (this.cancelRequested) {
+                            if (cts.IsCancellationRequested) {
                                 return "Operation cancelled.";
                             }
 
@@ -413,7 +399,7 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
 
                     // process histograms
                     foreach (XmlNode currstack in allstacknodes) {
-                        if (this.cancelRequested) {
+                        if (cts.IsCancellationRequested) {
                             return "Operation cancelled.";
                         }
 
@@ -464,14 +450,14 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
                 var tmpThread = new Thread(ProcessCallStack);
                 threads.Add(tmpThread);
                 tmpThread.Start(new ThreadParams() {dllPaths = dllPaths, framesOnSingleLine = framesOnSingleLine, includeOffsets = includeOffsets,includeSourceInfo = includeSourceInfo,
-                    showInlineFrames = showInlineFrames, listOfCallStacks = listOfCallStacks, numThreads = numThreads, relookupSource = relookupSource,
-                    searchDLLRecursively = searchDLLRecursively, searchPDBsRecursively = searchPDBsRecursively, symPath = symPath, threadOrdinal = threadOrdinal, cachePDB = cachePDB});
+                    showInlineFrames = showInlineFrames, listOfCallStacks = listOfCallStacks, numThreads = numThreads, relookupSource = relookupSource, searchDLLRecursively = searchDLLRecursively,
+                    searchPDBsRecursively = searchPDBsRecursively, symPath = symPath, threadOrdinal = threadOrdinal, cachePDB = cachePDB, cts = cts});
             }
 
             this.StatusMessage = "Waiting for threads to finish...";
             threads.ForEach(tmpThread => tmpThread.Join());
 
-            if (this.cancelRequested) {
+            if (cts.IsCancellationRequested) {
                 return "Operation cancelled.";
             }
 
@@ -483,10 +469,9 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
                 this.StatusMessage = $@"Writing output to file {outputFilePath}";
                 using var outStream = new StreamWriter(outputFilePath, false);
                 foreach (var currstack in listOfCallStacks) {
-                    if (this.cancelRequested) {
+                    if (cts.IsCancellationRequested) {
                         return "Operation cancelled.";
                     }
-
                     if (!string.IsNullOrEmpty(currstack.Resolvedstack)) outStream.WriteLine(currstack.Resolvedstack);
                     else if (!string.IsNullOrEmpty(currstack.Callstack.Trim())) {
                         outStream.WriteLine("WARNING: No output to show. This may indicate an internal error!");
@@ -501,7 +486,7 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
                 this.StatusMessage = "Consolidating output for screen display...";
 
                 foreach (var currstack in listOfCallStacks) {
-                    if (this.cancelRequested) {
+                    if (cts.IsCancellationRequested) {
                         return "Operation cancelled.";
                     }
 
@@ -540,7 +525,7 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
             var modulesToIgnore = new List<string>();
 
             for (int tmpStackIndex = 0; tmpStackIndex < tp.listOfCallStacks.Count; tmpStackIndex++) {
-                if (this.cancelRequested) break;
+                if (tp.cts.IsCancellationRequested) break;
                 if (tmpStackIndex % tp.numThreads != tp.threadOrdinal) continue;
 
                 var currstack = tp.listOfCallStacks[tmpStackIndex];
