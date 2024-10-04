@@ -7,34 +7,35 @@ on:
         description: 'Filter expression to use for running tests'
         default: 'TestCategory=Unit|TestCategory=Perf'
         required: false
-
 jobs:
   build:
     runs-on: windows-latest
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3.0.2
+      uses: actions/checkout@v4
     - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v1.1
+      uses: microsoft/setup-msbuild@v2
     - name: Setup NuGet
-      uses: NuGet/setup-nuget@v1.0.6
+      uses: NuGet/setup-nuget@v2
     - name: Restore NuGet Packages
       run: nuget restore SQLCallStackResolver.sln
     - name: Build SQLCallStackResolver
       run: msbuild SQLCallStackResolver.sln /p:Configuration=Release
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3.1.0
+      uses: actions/upload-artifact@v4
       with:
         name: SQLCallStackResolver
         path: |
-          Target\Release
-          !Target\Release\*.xml
-          !Target\Release\Tests
+          Target/Release
+          !Target/Release/*.xml
+          !Target/Release/Tests
     - name: Prep for running tests
-      run: .\downloadsyms.ps1 '${{ secrets.SQLDKDLL_URL }}' '${{ secrets.XESPINS_ZIP_URL }}' '${{ secrets.XEWAIT_URL }}'
-      working-directory: Tests\TestCases
+      run: ./downloadsyms.ps1
+      working-directory: Tests/TestCases
       shell: powershell
     - name: Run tests
-      run: ..\..\..\packages\Microsoft.TestPlatform.17.2.0\tools\net451\Common7\IDE\Extensions\TestPlatform\vstest.console.exe .\SQLCalLStackResolver.Tests.dll /Parallel /logger:"console;verbosity=normal" /TestCaseFilter:"${{ github.event.inputs.testsfilter || 'TestCategory=Unit' }}"
-      working-directory: Target\Release\Tests
+      run: |
+        ../../../utils/import-vsenv.ps1
+        & "$env:VSINSTALLDIR/Common7/IDE/Extensions/TestPlatform/vstest.console.exe" ./SQLCalLStackResolver.Tests.dll /Parallel /logger:"console;verbosity=normal" /TestCaseFilter:"${{ github.event.inputs.testsfilter || 'TestCategory=Unit' }}"
+      working-directory: Target/Release/Tests
       shell: powershell

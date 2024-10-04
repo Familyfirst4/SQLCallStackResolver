@@ -1,16 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License - see LICENSE file in this repo.
 namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
-    using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
-    using System.Globalization;
-    using System.IO;
-    using System.Linq;
-    using System.Runtime.Serialization;
-    using System.Runtime.Serialization.Json;
-    using System.Text;
-    using System.Text.RegularExpressions;
-
     [DataContract] public class SQLBuildInfo {
         [DataMember(Order=0)] public string ProductMajorVersion = "<<ProductMajorVersion>>";
         [DataMember(Order = 1)] public string ProductLevel = "<<ProductLevel>>";
@@ -61,30 +51,6 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
             fs.Flush();
             fs.Close();
             File.WriteAllText(jsonFile, File.ReadAllText(jsonFile, Encoding.UTF8).Replace(@"\/", "/"));
-        }
-
-        public static string GetDownloadScriptPowerShell(SQLBuildInfo bld, bool includeMarkdown) {
-            Contract.Requires(bld != null);
-
-            var symcmds = new StringBuilder();
-
-            if (null != bld.SymbolDetails && bld.SymbolDetails.Where(s => s.DownloadVerified).Any()) {
-                if (includeMarkdown) {
-                    symcmds.AppendLine($"# {bld}");
-                    symcmds.AppendLine("``` powershell");
-                }
-                symcmds.AppendLine($"# {bld}");
-                symcmds.AppendLine($"$outputFolder = 'c:\\sqlsyms\\{bld.BuildNumber}\\{bld.MachineType}' # <<change this output folder if needed>>'");
-                symcmds.AppendLine($"mkdir -f $outputFolder");
-                foreach (var sym in bld.SymbolDetails.Where(s => s.DownloadVerified)) {
-                    symcmds.AppendLine($"if (-not (Test-Path \"$outputFolder\\{sym.PDBName}.pdb\")) {{ Invoke-WebRequest -uri '{sym.DownloadURL}' -OutFile \"$outputFolder\\{sym.PDBName}.pdb\" }} # File version {sym.FileVersion}");
-                }
-
-                if (includeMarkdown) symcmds.AppendLine("```");
-                symcmds.AppendLine();
-            }
-
-            return symcmds.ToString();
         }
     }
 }

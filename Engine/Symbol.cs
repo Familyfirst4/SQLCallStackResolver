@@ -1,13 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License - see LICENSE file in this repo.
 namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
-    using System;
-    using System.Net;
-    using System.Runtime.Serialization;
-
     [DataContract] public class Symbol {
         [DataMember(Order = 0)] public string PDBName;
-        [IgnoreDataMember] public string InternalPDBName;
+        [IgnoreDataMember] public string ModuleName;
         [IgnoreDataMember] public string PDBGuid;
         [IgnoreDataMember] public int PDBAge;
         [IgnoreDataMember] public ulong CalculatedModuleBaseAddress;
@@ -15,14 +11,13 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver {
         [DataMember(Order = 2)] public bool DownloadVerified;
         [DataMember(Order = 3)] public string FileVersion;
 
-        public static bool IsURLValid(Uri url) {
+        public static async Task<bool> IsURLValid(Uri url) {
             try {
-                if (WebRequest.Create(url) is HttpWebRequest request) {
-                    request.Method = "HEAD";
-                    if (request.GetResponse() is HttpWebResponse response) response.Close();
-                    return true;
-                }
-            } catch (WebException) { /* this will fall through to the return false so it is okay to leave blank */ }
+                using var client = new HttpClient();
+                using var req = new HttpRequestMessage(HttpMethod.Head, url);
+                var res = await client.SendAsync(req);
+                if (null != res.EnsureSuccessStatusCode()) return true;
+            } catch (HttpRequestException) { /* this will fall through to the return false so it is okay to leave blank */ } catch (ArgumentException) { /* this will fall through to the return false so it is okay to leave blank */ }
             return false;
         }
     }
